@@ -320,12 +320,40 @@ cdef class Slider:
         self.stride = values.strides[0]
         self.orig_data = self.buf.data
 
+        """
         self.buf.data = self.values.data
         self.buf.strides[0] = self.stride
+        """
+        buf = cnp.PyArray_New(
+            np.ndarray,
+            buf.ndim,
+            buf.shape,
+            values.dtype.num,
+            &values.strides[0],
+            values.data,
+            0,
+            cnp.PyArray_FLAGS(buf),
+            None,
+        )
+        cnp.set_array_base(buf, self.values)
 
     cdef move(self, int start, int end):
         """
         For slicing
+        """
+        """
+        self.buf = cnp.PyArray_New(
+            cnp.ndarray,
+            self.buf.ndim,
+            self.buf.shape,
+            self.values.dtype.num,
+            &self.values.strides[0],
+            self.values.data,
+            0,
+            cnp.PyArray_FLAGS(self.buf),
+            self.values
+        )
+        cnp.set_array_base(self.buf, self.values)
         """
         self.buf.data = self.values.data + self.stride * start
         self.buf.shape[0] = end - start
@@ -454,6 +482,19 @@ cdef class BlockSlider:
 
         # move and set the index
         self.idx_slider.move(start, end)
+
+        # TODO: _index_data and data need to be cleaned up. It appears that
+        # old implementations worked when _index_data and ._values pointed to
+        # the same underlying memory. ._values is not assignable, so ._index_data
+        # would be used and have it's own .data property assigned to
+        # The .data assignment is not supported by numpy and disallowed in Cython
+        # 3.0, so when removing that we have a bit of a mess between ._data, ._index_data
+        # and ._values
+        self.dummy.index._index_data = self.idx_slider.buf
+        if hasattr(self.dummy.index._data, '_ndarray'):  # This is for EAs
+            object.__setattr__(self.dummy.index._data, '_ndarray', self.idx_slider.buf)
+        else:
+            object.__setattr__(self.dummy.index, '_data', self.idx_slider.buf)
 
         object.__setattr__(self.index, '_index_data', self.idx_slider.buf)
         self.index._engine.clear_mapping()

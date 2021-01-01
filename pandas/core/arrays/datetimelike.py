@@ -202,9 +202,13 @@ class DatetimeLikeArrayMixin(OpsMixin, NDArrayBackedExtensionArray):
     # ------------------------------------------------------------------
     # NDArrayBackedExtensionArray compat
 
-    @cache_readonly
+    @property
     def _ndarray(self) -> np.ndarray:
         return self._data
+
+    @_ndarray.setter
+    def _ndarray(self, other):
+        self._data = other
 
     def _from_backing_data(
         self: DatetimeLikeArrayT, arr: np.ndarray
