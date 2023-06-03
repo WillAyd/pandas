@@ -25,7 +25,7 @@ from pandas._libs import (
     NaT,
     lib,
 )
-import pandas._libs.groupby as libgroupby
+import pandas._libs.pandas_rust_algos.pandas_rust_algos as libgroupby
 from pandas._typing import (
     ArrayLike,
     AxisInt,

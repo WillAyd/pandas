@@ -40,8 +40,8 @@ from pandas._libs import (
     lib,
 )
 from pandas._libs.algos import rank_1d
-import pandas._libs.groupby as libgroupby
 from pandas._libs.missing import NA
+import pandas._libs.pandas_rust_algos.pandas_rust_algos as libgroupby
 from pandas._typing import (
     AnyArrayLike,
     ArrayLike,
