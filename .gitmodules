@@ -1,0 +1,3 @@
+[submodule "pandas/_libs/pandas_rust_algos"]
+	path = pandas/_libs/pandas_rust_algos
+	url = https://github.com/WillAyd/pandas_rust_algos.git
