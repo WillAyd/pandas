@@ -117,3 +117,4 @@ py.install_sources('__init__.py',
                     subdir: 'pandas/_libs')
 
 subdir('window')
+subdir('pandas_rust_algos')
