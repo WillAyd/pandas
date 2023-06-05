@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from pandas._libs import groupby as libgroupby
-from pandas._libs.groupby import (
+import pandas._libs.pandas_rust_algos.pandas_rust_algos as libgroupby
+from pandas._libs.pandas_rust_algos.pandas_rust_algos import (
     group_cumprod,
     group_cumsum,
     group_mean,
