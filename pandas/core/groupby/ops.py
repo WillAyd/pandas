@@ -190,7 +190,7 @@ class WrappedCythonOp:
             elif how == "skew":
                 # _get_cython_vals will convert to float64
                 pass
-            elif "object" not in f.__signatures__:
+            elif how not in {"last", "nth", "rank"}:
                 # raise NotImplementedError here rather than TypeError later
                 raise NotImplementedError(
                     f"function is not implemented for this dtype: "
