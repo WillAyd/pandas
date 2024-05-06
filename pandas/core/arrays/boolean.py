@@ -7,6 +7,7 @@ from typing import (
     cast,
 )
 
+import nanopandas as nanopd
 import numpy as np
 
 from pandas._libs import (
@@ -113,6 +114,13 @@ class BooleanDtype(BaseMaskedDtype):
         """
         Construct BooleanArray from pyarrow Array/ChunkedArray.
         """
+        if isinstance(array, nanopd.ExtensionArray):
+            # TODO: a direct to_numpy() in nanopandas would be better than using a list
+            data = np.array([x if x is not None else 0 for x in array.to_pylist()])
+            # TODO: we should implement invert directly in nanopandas
+            mask = np.array([x if x is not None else False for x in array.isna()])
+            return BooleanArray(data.astype(bool), mask, copy=False)
+
         import pyarrow
 
         if array.type != pyarrow.bool_() and not pyarrow.types.is_null(array.type):

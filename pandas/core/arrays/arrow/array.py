@@ -290,9 +290,11 @@ class ArrowExtensionArray(
     _pa_array: pa.ChunkedArray
     _dtype: ArrowDtype
 
-    def __init__(self, values: pa.Array | pa.ChunkedArray) -> None:
+    def __init__(
+        self, values: pa.Array | pa.ChunkedArray | nanopd.ExtensionArray
+    ) -> None:
         if pa_version_under10p1:  # nanopandas fallback
-            if isinstance(values, nanopd.StringArray):
+            if isinstance(values, nanopd.ExtensionArray):
                 self._pa_array = values
             else:
                 raise ValueError(
@@ -645,7 +647,7 @@ class ArrowExtensionArray(
                 else:
                     return scalar
         else:  # nanopandas path
-            if isinstance(value, nanopd.StringArray):
+            if isinstance(value, nanopd.ExtensionArray):
                 return type(self)(value)
             else:
                 return value
@@ -1387,6 +1389,9 @@ class ArrowExtensionArray(
         copy: bool = False,
         na_value: object = lib.no_default,
     ) -> np.ndarray:
+        if isinstance(self._pa_array, nanopd.ExtensionArray):
+            return np.array(self._pa_array.to_pylist())
+
         original_na_value = na_value
         dtype, na_value = to_numpy_dtype_inference(self, dtype, na_value, self._hasna)
         pa_type = self._pa_array.type
@@ -1552,6 +1557,20 @@ class ArrowExtensionArray(
         -------
         ArrowExtensionArray
         """
+        if pa_version_under10p1:  # nanopandas fallback
+            # TODO: the nanopandas implementation incorrectly did not make
+            # _concat_same_type accept a sequence...but it should
+            records = list(to_concat)
+            if len(records) == 0:
+                raise NotImplementedError("may not work with nanopandas")
+            elif len(records) == 1:
+                return cls(to_concat[0])
+            else:
+                for i in range(len(records) - 1):
+                    arr = records[i]._concat_same_type(records[i + 1])
+
+            return cls(arr)
+
         chunks = [array for ea in to_concat for array in ea._pa_array.iterchunks()]
         if to_concat[0].dtype == "string":
             # StringDtype has no attribute pyarrow_dtype

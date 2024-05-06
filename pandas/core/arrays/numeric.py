@@ -7,6 +7,7 @@ from typing import (
     Callable,
 )
 
+import nanopandas as nanopd
 import numpy as np
 
 from pandas._libs import (
@@ -61,18 +62,25 @@ class NumericDtype(BaseMaskedDtype):
         return True
 
     def __from_arrow__(
-        self, array: pyarrow.Array | pyarrow.ChunkedArray
+        self, array: pyarrow.Array | pyarrow.ChunkedArray | nanopd.ExtensionArray
     ) -> BaseMaskedArray:
         """
         Construct IntegerArray/FloatingArray from pyarrow Array/ChunkedArray.
         """
+        array_class = self.construct_array_type()
+
+        if isinstance(array, nanopd.ExtensionArray):
+            # TODO: a direct to_numpy() in nanopandas would be better than using a list
+            data = np.array([x if x is not None else 0 for x in array.to_pylist()])
+            # TODO: we should implement invert directly in nanopandas
+            mask = np.array([x if x is not None else False for x in array.isna()])
+            return array_class(data.copy(), mask, copy=False)
+
         import pyarrow
 
         from pandas.core.arrays.arrow._arrow_utils import (
             pyarrow_array_to_numpy_and_mask,
         )
-
-        array_class = self.construct_array_type()
 
         pyarrow_type = pyarrow.from_numpy_dtype(self.type)
         if not array.type.equals(pyarrow_type) and not pyarrow.types.is_null(

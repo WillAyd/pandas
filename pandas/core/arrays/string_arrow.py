@@ -277,9 +277,6 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return np.array(result, dtype=np.bool_)
 
     def astype(self, dtype, copy: bool = True):
-        if not self._uses_pyarrow:
-            raise NotImplementedError("astype not implemented for nanopandas")
-
         dtype = pandas_dtype(dtype)
 
         if dtype == self.dtype:
@@ -495,14 +492,14 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
 
     def _str_isalnum(self):
         if not self._uses_pyarrow:
-            return self._pa_array.isalnum()
+            return self._result_converter(self._pa_array.isalnum())
 
         result = pc.utf8_is_alnum(self._pa_array)
         return self._result_converter(result)
 
     def _str_isalpha(self):
         if not self._uses_pyarrow:
-            return self._pa_array.isalpha()
+            return self._result_converter(self._pa_array.isalpha())
 
         result = pc.utf8_is_alpha(self._pa_array)
         return self._result_converter(result)
@@ -516,14 +513,14 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
 
     def _str_isdigit(self):
         if not self._uses_pyarrow:
-            return self._pa_array.isdigit()
+            return self._result_converter(self._pa_array.isdigit())
 
         result = pc.utf8_is_digit(self._pa_array)
         return self._result_converter(result)
 
     def _str_islower(self):
         if not self._uses_pyarrow:
-            return self._pa_array.islower()
+            return self._result_converter(self._pa_array.islower())
 
         result = pc.utf8_is_lower(self._pa_array)
         return self._result_converter(result)
@@ -537,7 +534,7 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
 
     def _str_isspace(self):
         if not self._uses_pyarrow:
-            return self._pa_array.isspace()
+            return self._result_converter(self._pa_array.isspace())
 
         result = pc.utf8_is_space(self._pa_array)
         return self._result_converter(result)
@@ -551,27 +548,27 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
 
     def _str_isupper(self):
         if not self._uses_pyarrow:
-            return self._pa_array.isupper()
+            return self._result_converter(self._pa_array.isupper())
 
         result = pc.utf8_is_upper(self._pa_array)
         return self._result_converter(result)
 
     def _str_len(self):
         if not self._uses_pyarrow:
-            return self._pa_array.len()
+            return self._convert_int_dtype(self._pa_array.len())
 
         result = pc.utf8_length(self._pa_array)
         return self._convert_int_dtype(result)
 
     def _str_lower(self) -> Self:
         if not self._uses_pyarrow:
-            return self._pa_array.lower()
+            return type(self)(self._pa_array.lower())
 
         return type(self)(pc.utf8_lower(self._pa_array))
 
     def _str_upper(self) -> Self:
         if not self._uses_pyarrow:
-            return self._pa_array.upper()
+            return type(self)(self._pa_array.upper())
 
         return type(self)(pc.utf8_upper(self._pa_array))
 
