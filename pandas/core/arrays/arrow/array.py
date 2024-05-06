@@ -14,6 +14,7 @@ from typing import (
 )
 import unicodedata
 
+import nanopandas as nanopd
 import numpy as np
 
 from pandas._libs import lib
@@ -290,18 +291,24 @@ class ArrowExtensionArray(
     _dtype: ArrowDtype
 
     def __init__(self, values: pa.Array | pa.ChunkedArray) -> None:
-        if pa_version_under10p1:
-            msg = "pyarrow>=10.0.1 is required for PyArrow backed ArrowExtensionArray."
-            raise ImportError(msg)
-        if isinstance(values, pa.Array):
-            self._pa_array = pa.chunked_array([values])
-        elif isinstance(values, pa.ChunkedArray):
-            self._pa_array = values
+        if pa_version_under10p1:  # nanopandas fallback
+            if isinstance(values, nanopd.StringArray):
+                self._pa_array = values
+            else:
+                raise ValueError(
+                    f"Unsupported type '{type(values)}' for ArrowExtensionArray"
+                )
+            self._dtype = values.dtype
         else:
-            raise ValueError(
-                f"Unsupported type '{type(values)}' for ArrowExtensionArray"
-            )
-        self._dtype = ArrowDtype(self._pa_array.type)
+            if isinstance(values, pa.Array):
+                self._pa_array = pa.chunked_array([values])
+            elif isinstance(values, pa.ChunkedArray):
+                self._pa_array = values
+            else:
+                raise ValueError(
+                    f"Unsupported type '{type(values)}' for ArrowExtensionArray"
+                )
+            self._dtype = ArrowDtype(self._pa_array.type)
 
     @classmethod
     def _from_sequence(
@@ -620,21 +627,28 @@ class ArrowExtensionArray(
                 item = slice(item.start, None, item.step)
 
         value = self._pa_array[item]
-        if isinstance(value, pa.ChunkedArray):
-            return type(self)(value)
-        else:
-            pa_type = self._pa_array.type
-            scalar = value.as_py()
-            if scalar is None:
-                return self._dtype.na_value
-            elif pa.types.is_timestamp(pa_type) and pa_type.unit != "ns":
-                # GH 53326
-                return Timestamp(scalar).as_unit(pa_type.unit)
-            elif pa.types.is_duration(pa_type) and pa_type.unit != "ns":
-                # GH 53326
-                return Timedelta(scalar).as_unit(pa_type.unit)
+
+        if not pa_version_under10p1:
+            if isinstance(value, pa.ChunkedArray):
+                return type(self)(value)
             else:
-                return scalar
+                pa_type = self._pa_array.type
+                scalar = value.as_py()
+                if scalar is None:
+                    return self._dtype.na_value
+                elif pa.types.is_timestamp(pa_type) and pa_type.unit != "ns":
+                    # GH 53326
+                    return Timestamp(scalar).as_unit(pa_type.unit)
+                elif pa.types.is_duration(pa_type) and pa_type.unit != "ns":
+                    # GH 53326
+                    return Timedelta(scalar).as_unit(pa_type.unit)
+                else:
+                    return scalar
+        else:  # nanopandas path
+            if isinstance(value, nanopd.StringArray):
+                return type(self)(value)
+            else:
+                return value
 
     def __iter__(self) -> Iterator[Any]:
         """

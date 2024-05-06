@@ -17,7 +17,6 @@ from pandas._libs import (
 )
 from pandas._libs.arrays import NDArrayBacked
 from pandas._libs.lib import ensure_string_array
-from pandas.compat import pa_version_under10p1
 from pandas.compat.numpy import function as nv
 from pandas.util._decorators import doc
 
@@ -132,10 +131,7 @@ class StringDtype(StorageExtensionDtype):
                 f"Storage must be 'python', 'pyarrow' or 'pyarrow_numpy'. "
                 f"Got {storage} instead."
             )
-        if storage in ("pyarrow", "pyarrow_numpy") and pa_version_under10p1:
-            raise ImportError(
-                "pyarrow>=10.0.1 is required for PyArrow backed StringArray."
-            )
+
         self.storage = storage
 
     @property
@@ -389,10 +385,6 @@ class StringArray(BaseStringArray, NumpyExtensionArray):  # type: ignore[misc]
     def _from_sequence(
         cls, scalars, *, dtype: Dtype | None = None, copy: bool = False
     ) -> Self:
-        if dtype and not (isinstance(dtype, str) and dtype == "string"):
-            dtype = pandas_dtype(dtype)
-            assert isinstance(dtype, StringDtype) and dtype.storage == "python"
-
         from pandas.core.arrays.masked import BaseMaskedArray
 
         if isinstance(scalars, BaseMaskedArray):

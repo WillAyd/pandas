@@ -31,7 +31,8 @@ dependencies = [
   "numpy>=1.26.0; python_version>='3.12'",
   "python-dateutil>=2.8.2",
   "pytz>=2020.1",
-  "tzdata>=2022.7"
+  "tzdata>=2022.7",
+  "nanopandas",
 ]
 classifiers = [
     'Development Status :: 5 - Production/Stable',

@@ -10,6 +10,7 @@ from typing import (
     cast,
 )
 
+import nanopandas as nanopd
 import numpy as np
 
 from pandas._config.config import get_option
@@ -72,12 +73,6 @@ if TYPE_CHECKING:
 ArrowStringScalarOrNAT = Union[str, libmissing.NAType]
 
 
-def _chk_pyarrow_available() -> None:
-    if pa_version_under10p1:
-        msg = "pyarrow>=10.0.1 is required for PyArrow backed ArrowExtensionArray."
-        raise ImportError(msg)
-
-
 # TODO: Inherit directly from BaseStringArrayMethods. Currently we inherit from
 # ObjectStringArrayMixin because we want to have the object-dtype based methods as
 # fallback for the ones that pyarrow doesn't yet support
@@ -129,9 +124,14 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     # base class "ArrowExtensionArray" defined the type as "ArrowDtype")
     _dtype: StringDtype  # type: ignore[assignment]
     _storage = "pyarrow"
+    _uses_pyarrow = not pa_version_under10p1
 
     def __init__(self, values) -> None:
-        _chk_pyarrow_available()
+        if not self._uses_pyarrow:  # nanopandas fallback
+            super().__init__(values)
+            self._dtype = StringDtype(storage=self._storage)
+            return
+
         if isinstance(values, (pa.Array, pa.ChunkedArray)) and pa.types.is_string(
             values.type
         ):
@@ -151,6 +151,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
 
     @classmethod
     def _box_pa_scalar(cls, value, pa_type: pa.DataType | None = None) -> pa.Scalar:
+        if not cls._uses_pyarrow:
+            raise NotImplementedError("Insert not implemented for nanopandas")
+
         pa_scalar = super()._box_pa_scalar(value, pa_type)
         if pa.types.is_string(pa_scalar.type) and pa_type is None:
             pa_scalar = pc.cast(pa_scalar, pa.large_string())
@@ -160,6 +163,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _box_pa_array(
         cls, value, pa_type: pa.DataType | None = None, copy: bool = False
     ) -> pa.Array | pa.ChunkedArray:
+        if not cls._uses_pyarrow:
+            raise NotImplementedError("Insert not implemented for nanopandas")
+
         pa_array = super()._box_pa_array(value, pa_type)
         if pa.types.is_string(pa_array.type) and pa_type is None:
             pa_array = pc.cast(pa_array, pa.large_string())
@@ -179,9 +185,11 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _from_sequence(
         cls, scalars, *, dtype: Dtype | None = None, copy: bool = False
     ) -> Self:
-        from pandas.core.arrays.masked import BaseMaskedArray
+        if not cls._uses_pyarrow:
+            # TODO: does nanopd need more FromSequence specializations?
+            return cls(nanopd.StringArray(scalars))
 
-        _chk_pyarrow_available()
+        from pandas.core.arrays.masked import BaseMaskedArray
 
         if dtype and not (isinstance(dtype, str) and dtype == "string"):
             dtype = pandas_dtype(dtype)
@@ -208,6 +216,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _from_sequence_of_strings(
         cls, strings, *, dtype: ExtensionDtype, copy: bool = False
     ) -> Self:
+        if not cls._uses_pyarrow:
+            return cls(nanopd.StringArray._from_sequence(strings))
+
         return cls._from_sequence(strings, dtype=dtype, copy=copy)
 
     @property
@@ -218,6 +229,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return self._dtype
 
     def insert(self, loc: int, item) -> ArrowStringArray:
+        if not self._uses_pyarrow:
+            raise NotImplementedError("Insert not implemented for nanopandas")
+
         if not isinstance(item, str) and item is not libmissing.NA:
             raise TypeError("Scalar must be NA or str")
         return super().insert(loc, item)
@@ -242,6 +256,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return super()._maybe_convert_setitem_value(value)
 
     def isin(self, values: ArrayLike) -> npt.NDArray[np.bool_]:
+        if not self._uses_pyarrow:
+            raise NotImplementedError("isin not implemented for nanopandas")
+
         value_set = [
             pa_scalar.as_py()
             for pa_scalar in [pa.scalar(value, from_pandas=True) for value in values]
@@ -260,6 +277,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return np.array(result, dtype=np.bool_)
 
     def astype(self, dtype, copy: bool = True):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("astype not implemented for nanopandas")
+
         dtype = pandas_dtype(dtype)
 
         if dtype == self.dtype:
@@ -284,6 +304,8 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _str_map(
         self, f, na_value=None, dtype: Dtype | None = None, convert: bool = True
     ):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_map not implemented for nanopandas")
         # TODO: de-duplicate with StringArray method. This method is moreless copy and
         # paste.
 
@@ -344,6 +366,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _str_contains(
         self, pat, case: bool = True, flags: int = 0, na=np.nan, regex: bool = True
     ):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_contains not implemented for nanopandas")
+
         if flags:
             if get_option("mode.performance_warnings"):
                 fallback_performancewarning()
@@ -359,6 +384,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return result
 
     def _str_startswith(self, pat: str | tuple[str, ...], na: Scalar | None = None):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_startswith not implemented for nanopandas")
+
         if isinstance(pat, str):
             result = pc.starts_with(self._pa_array, pattern=pat)
         else:
@@ -378,6 +406,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return self._result_converter(result)
 
     def _str_endswith(self, pat: str | tuple[str, ...], na: Scalar | None = None):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_endswith not implemented for nanopandas")
+
         if isinstance(pat, str):
             result = pc.ends_with(self._pa_array, pattern=pat)
         else:
@@ -405,6 +436,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         flags: int = 0,
         regex: bool = True,
     ):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_replace not implemented for nanopandas")
+
         if isinstance(pat, re.Pattern) or callable(repl) or not case or flags:
             if get_option("mode.performance_warnings"):
                 fallback_performancewarning()
@@ -415,6 +449,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return type(self)(result)
 
     def _str_repeat(self, repeats: int | Sequence[int]):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_repeat not implemented for nanopandas")
+
         if not isinstance(repeats, int):
             return super()._str_repeat(repeats)
         else:
@@ -423,6 +460,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _str_match(
         self, pat: str, case: bool = True, flags: int = 0, na: Scalar | None = None
     ):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_match not implemented for nanopandas")
+
         if not pat.startswith("^"):
             pat = f"^{pat}"
         return self._str_contains(pat, case, flags, na, regex=True)
@@ -430,6 +470,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _str_fullmatch(
         self, pat, case: bool = True, flags: int = 0, na: Scalar | None = None
     ):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_fullmatch not implemented for nanopandas")
+
         if not pat.endswith("$") or pat.endswith("\\$"):
             pat = f"{pat}$"
         return self._str_match(pat, case, flags, na)
@@ -437,6 +480,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _str_slice(
         self, start: int | None = None, stop: int | None = None, step: int | None = None
     ) -> Self:
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_slice not implemented for nanopandas")
+
         if stop is None:
             return super()._str_slice(start, stop, step)
         if start is None:
@@ -448,52 +494,91 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         )
 
     def _str_isalnum(self):
+        if not self._uses_pyarrow:
+            return self._pa_array.isalnum()
+
         result = pc.utf8_is_alnum(self._pa_array)
         return self._result_converter(result)
 
     def _str_isalpha(self):
+        if not self._uses_pyarrow:
+            return self._pa_array.isalpha()
+
         result = pc.utf8_is_alpha(self._pa_array)
         return self._result_converter(result)
 
     def _str_isdecimal(self):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_isdecimal not implemented for nanopandas")
+
         result = pc.utf8_is_decimal(self._pa_array)
         return self._result_converter(result)
 
     def _str_isdigit(self):
+        if not self._uses_pyarrow:
+            return self._pa_array.isdigit()
+
         result = pc.utf8_is_digit(self._pa_array)
         return self._result_converter(result)
 
     def _str_islower(self):
+        if not self._uses_pyarrow:
+            return self._pa_array.islower()
+
         result = pc.utf8_is_lower(self._pa_array)
         return self._result_converter(result)
 
     def _str_isnumeric(self):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_isnumeric not implemented for nanopandas")
+
         result = pc.utf8_is_numeric(self._pa_array)
         return self._result_converter(result)
 
     def _str_isspace(self):
+        if not self._uses_pyarrow:
+            return self._pa_array.isspace()
+
         result = pc.utf8_is_space(self._pa_array)
         return self._result_converter(result)
 
     def _str_istitle(self):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_istitle not implemented for nanopandas")
+
         result = pc.utf8_is_title(self._pa_array)
         return self._result_converter(result)
 
     def _str_isupper(self):
+        if not self._uses_pyarrow:
+            return self._pa_array.isupper()
+
         result = pc.utf8_is_upper(self._pa_array)
         return self._result_converter(result)
 
     def _str_len(self):
+        if not self._uses_pyarrow:
+            return self._pa_array.len()
+
         result = pc.utf8_length(self._pa_array)
         return self._convert_int_dtype(result)
 
     def _str_lower(self) -> Self:
+        if not self._uses_pyarrow:
+            return self._pa_array.lower()
+
         return type(self)(pc.utf8_lower(self._pa_array))
 
     def _str_upper(self) -> Self:
+        if not self._uses_pyarrow:
+            return self._pa_array.upper()
+
         return type(self)(pc.utf8_upper(self._pa_array))
 
     def _str_strip(self, to_strip=None) -> Self:
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_strip not implemented for nanopandas")
+
         if to_strip is None:
             result = pc.utf8_trim_whitespace(self._pa_array)
         else:
@@ -501,6 +586,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return type(self)(result)
 
     def _str_lstrip(self, to_strip=None) -> Self:
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_lstrip not implemented for nanopandas")
+
         if to_strip is None:
             result = pc.utf8_ltrim_whitespace(self._pa_array)
         else:
@@ -508,6 +596,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return type(self)(result)
 
     def _str_rstrip(self, to_strip=None) -> Self:
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_rstrip not implemented for nanopandas")
+
         if to_strip is None:
             result = pc.utf8_rtrim_whitespace(self._pa_array)
         else:
@@ -515,6 +606,11 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return type(self)(result)
 
     def _str_removeprefix(self, prefix: str):
+        if not self._uses_pyarrow:
+            raise NotImplementedError(
+                "_str_removeprefix not implemented for nanopandas"
+            )
+
         if not pa_version_under13p0:
             starts_with = pc.starts_with(self._pa_array, pattern=prefix)
             removed = pc.utf8_slice_codeunits(self._pa_array, len(prefix))
@@ -523,18 +619,29 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return super()._str_removeprefix(prefix)
 
     def _str_removesuffix(self, suffix: str):
+        if not self._uses_pyarrow:
+            raise NotImplementedError(
+                "_str_removesuffix not implemented for nanopandas"
+            )
+
         ends_with = pc.ends_with(self._pa_array, pattern=suffix)
         removed = pc.utf8_slice_codeunits(self._pa_array, 0, stop=-len(suffix))
         result = pc.if_else(ends_with, removed, self._pa_array)
         return type(self)(result)
 
     def _str_count(self, pat: str, flags: int = 0):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_count not implemented for nanopandas")
+
         if flags:
             return super()._str_count(pat, flags)
         result = pc.count_substring_regex(self._pa_array, pat)
         return self._convert_int_dtype(result)
 
     def _str_find(self, sub: str, start: int = 0, end: int | None = None):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_find not implemented for nanopandas")
+
         if start != 0 and end is not None:
             slices = pc.utf8_slice_codeunits(self._pa_array, start, stop=end)
             result = pc.find_substring(slices, sub)
@@ -549,6 +656,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         return self._convert_int_dtype(result)
 
     def _str_get_dummies(self, sep: str = "|"):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_str_get_dummies not implemented for nanopandas")
+
         dummies_pa, labels = ArrowExtensionArray(self._pa_array)._str_get_dummies(sep)
         if len(labels) == 0:
             return np.empty(shape=(0, 0), dtype=np.int64), labels
@@ -561,6 +671,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
     def _reduce(
         self, name: str, *, skipna: bool = True, keepdims: bool = False, **kwargs
     ):
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_reduce not implemented for nanopandas")
+
         result = self._reduce_calc(name, skipna=skipna, keepdims=keepdims, **kwargs)
         if name in ("argmin", "argmax") and isinstance(result, pa.Array):
             return self._convert_int_dtype(result)
@@ -581,6 +694,9 @@ class ArrowStringArray(ObjectStringArrayMixin, ArrowExtensionArray, BaseStringAr
         """
         See Series.rank.__doc__.
         """
+        if not self._uses_pyarrow:
+            raise NotImplementedError("_rank not implemented for nanopandas")
+
         return self._convert_int_dtype(
             self._rank_calc(
                 axis=axis,
